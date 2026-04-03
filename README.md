@@ -1,10 +1,10 @@
-# dfa-automata
-Implementation of a Deterministic Finite Automaton (DFA) in Python, applying theoretical concepts from formal languages and automata theory.
+# automata-lab
+Implementation of a Deterministic Finite Automaton (DFA) and a Non-deterministic Finite Automaton (NFA) in Python, applying theoretical concepts from formal languages and automata theory.
 
 # Deterministic Finite Automaton (DFA) — Python Implementation
 
 This project comes directly from my **formal languages and automata** course this semester.
-The goal was simple: go from the formal definition of a DFA to a concrete implementation, and verify that both describe exactly the same thing.
+The goal was simple: go from the formal definition of a DFA to a concrete implementation, and verify that both describe exactly the same thing. The course gave me the theory — I just had to figure out how to make it run.
 
 ---
 
@@ -12,15 +12,16 @@ The goal was simple: go from the formal definition of a DFA to a concrete implem
 
 Formally, an automaton is a **quintuplet** A = (Σ, E, I, F, T) where:
 
-- **Σ** — an alphabet (the set of allowed symbols)                                    
-- **E** — a finite set of states                                                      
-- **I ⊆ E** — the set of initial states                                               
-- **F ⊆ E** — the set of final states                                                 
-- **T ⊆ E × Σ × E** — the set of transitions                                          
+- **Σ** — an alphabet (the set of allowed symbols)
+- **E** — a finite set of states
+- **I ⊆ E** — the set of initial states
+- **F ⊆ E** — the set of final states
+- **T ⊆ E × Σ × E** — the set of transitions
 
 A transition (p, a, q) means: *"from state p, reading symbol a, go to state q."*
 
-**This is extracted from the course of my university
+**This is extracted from the course of my university*
+
 ---
 
 A **concrete example** from the course:
@@ -76,7 +77,8 @@ The code and the theory say the same thing — just in two different languages.
 ## Project structure
 
 ```
-dfa.py — main implementation
+dfa_project.py — DFA implementation
+nfa_project.py — NFA implementation
 ```
 
 ---
@@ -143,10 +145,144 @@ Refactoring the code into a class made sense naturally, a DFA has state, and so 
 
 ---
 
+---
+
+# Non-deterministic Finite Automaton (NFA) — Python Implementation
+
+After finishing the DFA, I went looking online to see what came next in automata theory.
+That's when I found the concept of **non-deterministic finite automata**.
+It took me a moment to really understand what "non-deterministic" meant in practice — so I dug into it, and then implemented it myself to make sure I actually got it.
+
+---
+
+## What is an NFA?
+
+An NFA has the same structure as a DFA — states, an alphabet, transitions, a start state, final states.
+The difference is in the transitions: **at the same state, reading the same letter, you can go to multiple states at once**. And on top of that, there are **epsilon (ε) transitions** — transitions that move to another state without reading any letter at all.
+
+The way to think about it: instead of one cursor moving through the automaton, you have **a cloud of cursors** (clones). Every time there's a choice, all possibilities are explored simultaneously. If *at least one* clone ends up on a final state at the end of the word — the word is accepted.
+
+---
+
+## The key concept: epsilon-closure
+
+When you're in a state that has epsilon transitions, you automatically follow them — for free, without reading anything. The **epsilon-closure** of a set of states is all the states you can reach just by following epsilon transitions (including the states you started from).
+
+```
+Example:
+q0 --ε--> q1 --ε--> q2
+
+epsilon_closure({q0}) = {q0, q1, q2}
+```
+
+This is computed at every step — before reading a letter and after moving.
+
+---
+
+## How `accepte` works
+
+```
+1. Start from the epsilon-closure of the initial state
+2. For each letter in the word:
+      a. Move all current states using that letter  → deplacement_simple
+      b. Expand the result with epsilon-closure     → fermeture_epsilon
+      c. If the cloud of states is empty: return False immediately
+3. At the end: check if any current state is a final state
+```
+
+---
+
+## The NFA class
+
+```python
+class NFA:
+    def __init__(self, etat_initial, transitions: dict, etats_finaux: set):
+        ...
+    def fermeture_epsilon(self, etats_departs: set) -> set:
+        ...
+    def deplacement_simple(self, etats_actuel: set, lettre) -> set:
+        ...
+    def accepte(self, mot: str) -> bool:
+        ...
+```
+
+Parameters:
+* `etat_initial` — the starting state
+* `transitions` — dictionary `{state: {symbol: set_of_next_states}}` — note: values are **sets**, not single states
+* `etats_finaux` — set of accepting states
+
+The key structural difference from DFA: `transitions[state][symbol]` returns a **set** of states, not just one.
+
+---
+
+## Example usage
+
+```python
+# NFA: words that contain "ab" — non-deterministic version
+# At each 'a', the automaton clones itself: one clone stays on q0, one moves to q1
+transitions = {
+    'q0': {'a': {'q0', 'q1'}, 'b': {'q0'}},
+    'q1': {'b': {'q2'}},
+}
+
+nfa = NFA(etat_initial='q0', transitions=transitions, etats_finaux={'q2'})
+
+nfa.accepte("ab")    # True
+nfa.accepte("aab")   # True  — loop on q0, then "ab"
+nfa.accepte("b")     # False
+nfa.accepte("")      # False
+```
+
+```python
+# NFA with epsilon transitions: accepts either 'a' or 'b'
+# q0 clones into q1 and q2 via epsilon, before reading anything
+transitions = {
+    'q0': {'': {'q1', 'q2'}},   # ε-transitions
+    'q1': {'a': {'q3'}},
+    'q2': {'b': {'q3'}},
+}
+
+nfa2 = NFA(etat_initial='q0', transitions=transitions, etats_finaux={'q3'})
+
+nfa2.accepte("a")    # True
+nfa2.accepte("b")    # True
+nfa2.accepte("ab")   # False — q3 has no outgoing transitions
+nfa2.accepte("")     # False — q3 never reached
+```
+
+---
+
+## DFA vs NFA — what actually changes
+
+| | DFA | NFA |
+|---|---|---|
+| Transitions | one next state | a set of next states |
+| Epsilon transitions | no | yes |
+| Reading a letter | move to one state | expand a cloud of states |
+| Acceptance | one final state reached | at least one clone on a final state |
+| Implementation | simple loop | epsilon-closure + set operations |
+
+A DFA is a special case of an NFA where every transition goes to exactly one state and there are no epsilon transitions.
+
+---
+
+## What I learned
+
+The hardest part wasn't the code — it was understanding what non-determinism actually means here.
+It's not randomness. It's exploring all possible paths at once, and accepting if any of them works.
+
+Once I understood the "cloud of clones" mental model, the implementation followed naturally:
+- `fermeture_epsilon` → expand the cloud along epsilon transitions (DFS with a stack)
+- `deplacement_simple` → move the whole cloud forward by one letter
+- `accepte` → alternate between the two, check at the end
+
+The `set` data structure does all the heavy lifting — merging possible states with `update`, checking intersection with `&`.
+
+---
+
 ## Next steps
 
 * [ ] Add alphabet validation at initialization
-* [ ] Implement NFA (Non-deterministic Finite Automata)
 * [ ] NFA → DFA conversion (subset construction)
 * [ ] DFA minimization (Hopcroft's algorithm)
 
@@ -157,7 +293,8 @@ Refactoring the code into a class made sense naturally, a DFA has state, and so 
 No external dependencies required.
 
 ```bash
-python dfa.py
+python dfa_project.py
+python nfa_project.py
 ```
 
 ---
